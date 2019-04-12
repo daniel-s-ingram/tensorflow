@@ -23,10 +23,10 @@ from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras import backend
 from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.utils import tf_utils
-from tensorflow.python.util.tf_export import tf_export
+from tensorflow.python.util.tf_export import keras_export
 
 
-@tf_export('keras.layers.InputLayer')
+@keras_export('keras.layers.InputLayer')
 class InputLayer(base_layer.Layer):
   """Layer to be used as an entry point into a Network (a graph of layers).
 
@@ -77,6 +77,9 @@ class InputLayer(base_layer.Layer):
         dtype = backend.floatx()
       else:
         dtype = backend.dtype(input_tensor)
+    elif input_tensor is not None and input_tensor.dtype != dtype:
+      raise ValueError('`input_tensor.dtype` differs from `dtype`: %s vs. %s' %
+                       (input_tensor.dtype, dtype))
     super(InputLayer, self).__init__(dtype=dtype, name=name)
     self.built = True
     self.sparse = sparse
@@ -85,6 +88,8 @@ class InputLayer(base_layer.Layer):
 
     if isinstance(input_shape, tensor_shape.TensorShape):
       input_shape = tuple(input_shape.as_list())
+    elif isinstance(input_shape, int):
+      input_shape = (input_shape,)
 
     if input_tensor is None:
       if input_shape is not None:
@@ -115,11 +120,12 @@ class InputLayer(base_layer.Layer):
                          'InputLayer, you should instantiate your model and '
                          'directly call it on your input.')
       self.is_placeholder = False
-      self._batch_input_shape = tuple(input_tensor.get_shape().as_list())
+      self._batch_input_shape = tuple(input_tensor.shape.as_list())
 
     # Create an input node to add to self.outbound_node
     # and set output_tensors' _keras_history.
     input_tensor._keras_history = (self, 0, 0)  # pylint: disable=protected-access
+    input_tensor._keras_mask = None
     base_layer.Node(
         self,
         inbound_layers=[],
@@ -138,7 +144,7 @@ class InputLayer(base_layer.Layer):
     return config
 
 
-@tf_export('keras.layers.Input', 'keras.Input')
+@keras_export('keras.layers.Input', 'keras.Input')
 def Input(  # pylint: disable=invalid-name
     shape=None,
     batch_size=None,
@@ -180,26 +186,26 @@ def Input(  # pylint: disable=invalid-name
       **kwargs: deprecated arguments support.
 
   Returns:
-      A tensor.
+    A `tensor`.
 
   Example:
 
-      ```python
-      # this is a logistic regression in Keras
-      x = Input(shape=(32,))
-      y = Dense(16, activation='softmax')(x)
-      model = Model(x, y)
-      ```
+  ```python
+  # this is a logistic regression in Keras
+  x = Input(shape=(32,))
+  y = Dense(16, activation='softmax')(x)
+  model = Model(x, y)
+  ```
 
-      Note that even if eager execution is enabled,
-      `Input` produces a symbolic tensor (i.e. a placeholder).
-      This symbolic tensor can be used with other
-      TensorFlow ops, as such:
+  Note that even if eager execution is enabled,
+  `Input` produces a symbolic tensor (i.e. a placeholder).
+  This symbolic tensor can be used with other
+  TensorFlow ops, as such:
 
-      ```python
-      x = Input(shape=(32,))
-      y = tf.square(x)
-      ```
+  ```python
+  x = Input(shape=(32,))
+  y = tf.square(x)
+  ```
 
   Raises:
     ValueError: in case of invalid arguments.
@@ -215,8 +221,6 @@ def Input(  # pylint: disable=invalid-name
   if kwargs:
     raise ValueError('Unrecognized keyword arguments:', kwargs.keys())
 
-  if dtype is None:
-    dtype = backend.floatx()
   if shape is None and tensor is None:
     raise ValueError('Please provide to Input either a `shape`'
                      ' or a `tensor` argument. Note that '
